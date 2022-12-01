@@ -1,0 +1,194 @@
+---
+title: "Los Peces y el Mercurio Final"
+author: "Héctor Francisco Marin Garrido"
+date: "2022-12-01"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+
+
+```{r}
+library(stats)
+library(MVN)
+library(ggplot2)
+library(FactoMineR)
+library(factoextra)
+library(ggcorrplot)
+```
+Importamos los datos
+```{r}
+M = read.csv("/Users/hfmg1/Downloads/mercurio.csv", row.names=1)
+M
+```
+
+Empezamos limpiando los datos.
+```{r}
+f_atipic = function(x, removeNA = TRUE)
+  {
+  qrts = quantile(x, probs=c(0.25, 0.75), na.rm=removeNA)
+  caps = quantile(x, probs=c(0.05, 0.95), na.rm=removeNA)
+  iqr = qrts[2] - qrts[1]
+  x[x<qrts[1] - 1.5*iqr] = caps[1]
+  x[x>qrts[2] + 1.5*iqr] = caps[2]
+  x
+  }
+```
+Usaremos la funcion para quitar datos atipicos.
+```{r}
+x3=f_atipic(M$X3)
+x4=f_atipic(M$X4)
+x5=f_atipic(M$X5)
+x6=f_atipic(M$X6)
+x7=f_atipic(M$X7)
+x8=f_atipic(M$X8)
+x9=f_atipic(M$X9)
+x10=f_atipic(M$X10)
+x11=f_atipic(M$X11)
+```
+Podemos ver los datos limpios con boxplots.
+```{r}
+boxplot(x3, col="blue", main="Alcalinidad",horizontal=TRUE)
+
+boxplot(x4, col="red", main="PH",horizontal=TRUE)
+
+boxplot(x5, col="green", main="Calcio",horizontal=TRUE)
+
+boxplot(x6, col="pink", main="Clorofila",horizontal=TRUE)
+
+boxplot(x7, col="yellow", main="Concentración media de mercurio",horizontal=TRUE)
+
+boxplot(x8, col="purple", main="Número de peces estudiados en el lago",horizontal=TRUE)
+
+boxplot(x9, col="orange", main="Mínimo de la concentración de mercurio",horizontal=TRUE)
+
+boxplot(x10, col="brown", main="Boxplot del máximo de la concentración de mercurio",horizontal=TRUE)
+
+boxplot(x11, col="gray", main="Boxplot de la estimación de la concentración de mercurio",horizontal=TRUE)
+```
+Para verificar la normalidad podemos usar histogramas para la visualizacion. 
+```{r}
+hist(x3,col="blue",main="Alcalinidad",breaks=10,freq=FALSE)
+
+hist(x4,col="red",main="PH",breaks=10,freq=FALSE)
+
+hist(x5,col="green",main="Calcio",breaks=10,freq=FALSE)
+
+hist(x6,col="pink",main="Clorofila",breaks=10,freq=FALSE)
+
+hist(x7,col="yellow",main="Concentración media de mercurio",breaks=10,freq=FALSE)
+
+hist(x8,col="purple",main="Número de peces estudiados en el lago",breaks=10,freq=FALSE)
+
+hist(x9,col="orange",main="Mínimo de la concentración de mercurio",breaks=10,freq=FALSE)
+
+hist(x10,col="brown",main="Máximo de la concentración de mercurio",breaks=10,freq=FALSE)
+
+hist(x11,col="gray",main="Estimación de la concentración de mercurio",breaks=10,freq=FALSE)
+```
+Aunque algunos datos como el pH aparentan ser normales la mayoria no se comportan asi por lo que tendremos que hacer pruebas de normalidad.
+```{r}
+M2 = data.frame("Alcalinidad"=x3,"PH"=x4,"Calcio"=x5,"Clorofila"=x6,"Min_Conc"=x9,"Max_Conc"=x10,"Est_Conc"=x11)
+M2
+```
+Mardia Test
+```{r}
+n_test = mvn(M2, mvnTest="mardia")
+n_test$multivariateNormality
+```
+Basandonos en el sesgo y la curtosis concluimos que no se pasa la prueba de mardia
+```{r}
+n_test$univariateNormality
+```
+
+La prueba de Anderson Darling nos da un resultado interesante ya que nos dice que efectivamente tanto el pH como la concentracion maxima se distribuyen de manera normal, podemos ver esto a mayor detalle con las tablas de los datos descriptivos a continuacion. 
+
+```{r}
+n_test$Descriptives
+```
+Ahora haremos una nueva base de datos solo con los datos que se distribuyen de manera normal.
+```{r}
+M3=data.frame("PH"=x4,"Max_Conc"=x10)
+M3
+```
+Si repetimos la prueba de mardia y la de anderson-darling ahora podemos observar que ya se comporta de una manera normal. 
+```{r}
+norm_test = mvn(M3, mvnTest="mardia")
+norm_test$multivariateNormality
+```
+```{r}
+norm_test$univariateNormality
+```
+
+```{r}
+norm_test$Descriptives
+```
+Mostramos las graficas para mostrar el comportamiento bivariado.
+```{r}
+perspec = mvn(M3, mvnTest="mardia", multivariatePlot="persp")
+```
+```{r}
+countour = mvn(M3, mvnTest="mardia", multivariatePlot="contour")
+```
+En la grafica de contorno podemos observar que la mayoria de los datos se concentran dentro del area que nos indica que a mayor pH en el agua menor es la concentracion maxima de mercurio en ella. Aunque cabe recalcar que no se comporta de manera homogenea. A continuacion buscaremos los datos mas influyentes para lo que usaremos un grafico multivariado.
+```{r}
+# Indicar que se trata de 2 variables
+n_var= 2
+# Vector de medias
+X = colMeans(M3)
+# Matriz de covarianza
+S = cov(M3)
+# Distancia de Mahalanobis
+d2M =  mahalanobis(M3, X, S)
+# Multinormalidad Test gráfico Q-Q Plot
+plot(qchisq(((1:nrow(M3)) - 1/2)/nrow(M3),df=n_var), sort(d2M),xlab="Cuantiles Teoricos", ylab="Cuantiles de Muestra",main="PH y Concentración Máxima de Mercurio")
+abline(a=0, b=1, col="red")
+```
+Este grafico bivariado nos muestra que los datos se encuentran sesgados a la izquierda ya que presentan asimetria negativa tienden a ser normales pero caen al final. Podemos checar datos atipicos con la grafica de chi cuadrada y la distancia de mahalanobis.
+
+```{r}
+chi_sqr = mvn(M3, mvnTest="mardia", multivariateOutlierMethod="adj")
+```
+Para analizar los componentes principales hacemos uso de nuestra primer base de datos omitiendo los nombres de los lagos ya que esta es una variable categorica.
+```{r}
+M=data.frame("Alcalinidad"=x3,"PH"=x4,"Calcio"=x5,"Clorofila"=x6,"Conc_Med_Merc"=x7,"Num_peces_estud"=x8,"Min_Conc"=x9,"Max_Conc"=x10,"Est_Conc"=x11)
+M
+```
+Empezamos con la matriz de correlaciones.
+```{r}
+cor_M = cor(M)
+cor_M
+```
+Con esta matriz podemos empezar a identificar los componentes mas relevantes pero podemos hacer un analisis de componentes principales mas profundo.
+```{r}
+datos = cor_M
+cp = PCA(datos)
+fviz_pca_ind(cp, col.ind="red", addEllipses=TRUE, repel=TRUE)
+```
+En estas graficas observamos como se comportan las variables dependiendo de la dimension en la que se encuentran y la aportacion que tienen en ella. En la primera dimension (PCA 1) observamos que aqui se encuentran la mayoria de los datos y observamos que las variables que hacen referencia al mercurio afectan de manera positiva, mientras que las demas perjudican a la cantidad de mercurio en los peces y en los lagos.
+```{r}
+fviz_screeplot(cp)
+```
+Con el plot de codo logramos ver que se alcanzan a reducir las dimensiones de 8 a 1 sola. Esta teniendo una combinacion lineal de las variables anteriores
+```{r}
+fviz_contrib(cp, choice = c("var"))
+```
+En este grafico observamos que todas las variables aportan mucho al modelo excepto por el numero de peces estudiados la cual es una variable que podemos argumentar es irrelevante para este estudio. Podemos ver estos valores de manera numerica con las siguientes funciones.
+```{r}
+cp$eig
+```
+Podemos ver que el 86% de la informacion nos la da nuestro primer componente y el segundo nos da otro 11% por lo que podriamos reducir facilmente nuestro modelo a 2 dimensiones y podremos obtener informacion explicativa de mas de 98%
+```{r}
+cp$var$coord
+```
+Con la funcion coord observamos como nos quedan nuestras combinaciones lineales de las variables, esto nos da mas informacion acerca de nuestros componentes principales.
+```{r}
+cp$var$contrib
+```
+Ahora que observamos la contribucion de las dimensiones de manera individual podemos observar que todas las variables nos dan aproximadamente el 12% de la informacion a nuestro componente principal. Mientras tanto podemos tambien ver que nuestra segunda dimension tiene el 93% de la informacion por lo que ocupa todo este componente.
+ 
+Podemos llegar a dos conclusiones para empezar podemos anotar que la prueba mas util para verificar comportamiento normal dentro de los datos fue la de Anderson-Darling ya que es mas sensible para detectar desviaciones que suelen aparecner en colas de distribucion.
+
+En cuanto a los componentes principales observamos que este analisis nos ayudo a reducir la dimension de nuestro modelo, ya que comenzamos con 8 variables lo que nos da 8 dimensiones,con ayuda del PCA se hizo una combinacion lineal de las variables lo que  nos ayudo a disminuir el tamaño y nos facilito el procesamiento. Pudimos notar que el PH,calcio, clorofila y la alcalinidad nos ayuadn a disminuir la cantidad de mercurio en los lagos. Mientras que la cantidad de peces que se estudiaron afectan al analisis pero solo en aproximadamente el 12% de la informacion.
